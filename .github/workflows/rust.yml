@@ -43,6 +43,15 @@ jobs:
             target: aarch64-unknown-linux-gnu
             artifact_name: tcping
             asset_name: tcping-linux-arm64
+          # Linux静态链接版本
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact_name: tcping
+            asset_name: tcping-linux-amd64-static
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            artifact_name: tcping
+            asset_name: tcping-linux-arm64-static
           # macOS
           - os: macos-latest
             target: x86_64-apple-darwin
@@ -76,9 +85,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          
+      - name: 安装musl工具（Linux静态链接）
+        if: contains(matrix.target, 'linux-musl')
+        run: |
+          sudo apt-get update
+          if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
+            sudo apt-get install -y musl-tools
+          elif [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+            sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          fi
 
       - name: 构建
-        run: cargo build --release --target ${{ matrix.target }}
+        run: |
+          if [[ "${{ matrix.target }}" == *linux* ]]; then
+            # 对Linux目标使用静态链接
+            RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
 
       - name: 上传构建物
         uses: actions/upload-artifact@v4
@@ -112,6 +138,8 @@ jobs:
           mkdir -p release
           cp artifacts/tcping-linux-amd64/tcping release/tcping-linux-amd64
           cp artifacts/tcping-linux-arm64/tcping release/tcping-linux-arm64
+          cp artifacts/tcping-linux-amd64-static/tcping release/tcping-linux-amd64-static
+          cp artifacts/tcping-linux-arm64-static/tcping release/tcping-linux-arm64-static
           cp artifacts/tcping-macos-amd64/tcping release/tcping-macos-amd64
           cp artifacts/tcping-macos-arm64/tcping release/tcping-macos-arm64
           cp artifacts/tcping-windows-amd64/tcping.exe release/tcping-windows-amd64.exe
@@ -126,6 +154,8 @@ jobs:
           files: |
             release/tcping-linux-amd64
             release/tcping-linux-arm64
+            release/tcping-linux-amd64-static
+            release/tcping-linux-arm64-static
             release/tcping-macos-amd64
             release/tcping-macos-arm64
             release/tcping-windows-amd64.exe
