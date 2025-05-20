@@ -1,0 +1,20 @@
+[package]
+name = "tcping"
+version = "0.1.3"
+edition = "2024"
+authors = ["PACI <mail@pa.ci>"]
+description = "TCP Ping - 测试TCP端口连通性的工具"
+
+[profile.release]
+opt-level = 3       # 最高级别优化
+lto = true          # 开启链接时优化 
+codegen-units = 1   # 降低编译单元数，提高优化效果
+panic = "abort"     # 在 panic 时直接终止，减少二进制大小
+strip = true        # 去除符号信息，减小二进制大小
+
+[dependencies]
+clap = { version = "4.5.38", features = ["derive"] }
+dns-lookup = "2.0.4"
+tokio = { version = "1.45.0", features = ["rt-multi-thread", "time", "net", "macros"] }
+ctrlc = { version = "3.4.7", features = ["termination"] }
+colored = "3.0.0"
