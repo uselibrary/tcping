@@ -22,13 +22,15 @@ pub fn print_error(message: &str, color: bool) {
     }
 }
 
-// 改进信号处理逻辑，更加简洁
+// 改进信号处理逻辑，使用更精确的内存顺序
 pub fn setup_signal_handler(running: Arc<AtomicBool>) {
-    ctrlc::set_handler(move || {
-        if running.swap(false, Ordering::SeqCst) {
+    if let Err(err) = ctrlc::set_handler(move || {
+        if running.swap(false, Ordering::Relaxed) {
             println!(); // 只在第一次按Ctrl+C时打印新行
         } else {
             std::process::exit(0); // 连续两次按Ctrl+C直接退出
         }
-    }).expect("无法设置信号处理程序");
+    }) {
+        eprintln!("警告: 无法设置信号处理程序: {}", err);
+    }
 }

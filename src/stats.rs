@@ -64,42 +64,44 @@ impl PingStats {
         }
     }
 
-    // 计算中位数
+    // 计算中位数 - 优化以避免不必要的克隆
     pub fn median_time(&self) -> Option<Duration> {
-        if self.rtt_values.is_empty() {
+        let len = self.rtt_values.len();
+        if len == 0 {
             return None;
         }
         
-        let mut sorted_values = self.rtt_values.clone();
-        sorted_values.sort();
+        let mut indices: Vec<usize> = (0..len).collect();
+        indices.sort_by_key(|&i| self.rtt_values[i]);
         
-        let mid = sorted_values.len() / 2;
-        if sorted_values.len() % 2 == 0 && sorted_values.len() >= 2 {
+        let mid = len / 2;
+        if len % 2 == 0 && len >= 2 {
             // 偶数个元素，取中间两个的平均值
-            let sum = sorted_values[mid - 1] + sorted_values[mid];
+            let sum = self.rtt_values[indices[mid - 1]] + self.rtt_values[indices[mid]];
             Some(sum / 2)
         } else {
             // 奇数个元素，直接取中间值
-            Some(sorted_values[mid])
+            Some(self.rtt_values[indices[mid]])
         }
     }
 
-    // 计算标准差
+    // 计算标准差 - 优化数值计算
     pub fn std_deviation(&self) -> Option<f64> {
-        if self.rtt_values.len() <= 1 {
+        let count = self.received as usize;
+        if count <= 1 || self.rtt_values.len() <= 1 {
             return None; // 至少需要两个样本计算标准差
         }
         
-        let mean = self.total_time.as_secs_f64() / self.received as f64;
+        let mean = self.total_time.as_secs_f64() / count as f64;
         
-        let variance = self.rtt_values.iter()
+        let sum_sq_diff = self.rtt_values.iter()
             .map(|&time| {
                 let diff = time.as_secs_f64() - mean;
                 diff * diff
             })
-            .sum::<f64>() / (self.rtt_values.len() - 1) as f64; // 样本标准差使用n-1
+            .sum::<f64>();
         
-        Some(variance.sqrt())
+        Some((sum_sq_diff / (count - 1) as f64).sqrt())
     }
 
     pub fn print_summary(&self, hostname: &str, verbose: bool) {

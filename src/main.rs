@@ -14,7 +14,7 @@ use stats::PingStats;
 use network::{tcp_connect, resolve_host};
 use utils::{format_host_port, print_error, setup_signal_handler};
 
-/// 执行单次TCP Ping并返回结果
+/// 执行单次TCP Ping并返回结果 - 优化字符串处理
 async fn execute_single_ping(
     target: &SocketAddr, 
     hostname: &str,
@@ -31,9 +31,16 @@ async fn execute_single_ping(
     
     match result {
         Ok(local_addr) => {
+            let formatted_host = format_host_port(hostname, port);
+            let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
             let success_msg = format!("从 {} 收到响应: seq={} time={:.2}ms",
-                format_host_port(hostname, port), seq_num, elapsed.as_secs_f64() * 1000.0);
-            println!("{}", if color { success_msg.green().to_string() } else { success_msg });
+                formatted_host, seq_num, elapsed_ms);
+                
+            if color {
+                println!("{}", success_msg.green());
+            } else {
+                println!("{}", success_msg);
+            }
 
             if verbose {
                 if let Some(addr) = local_addr {
@@ -46,12 +53,18 @@ async fn execute_single_ping(
             (true, Some(elapsed))
         },
         Err(err) => {
+            let formatted_host = format_host_port(hostname, port);
             let error_msg = if err.contains("timed out") || err.contains("超时") {
-                format!("从 {} 超时: seq={}", format_host_port(hostname, port), seq_num)
+                format!("从 {} 超时: seq={}", formatted_host, seq_num)
             } else {
-                format!("从 {} 无法连接: seq={}", format_host_port(hostname, port), seq_num)
+                format!("从 {} 无法连接: seq={}", formatted_host, seq_num)
             };
-            println!("{}", if color { error_msg.red().to_string() } else { error_msg });
+            
+            if color {
+                println!("{}", error_msg.red());
+            } else {
+                println!("{}", error_msg);
+            }
 
             if verbose {
                 println!("  -> 连接失败详情: {}", err);
@@ -62,7 +75,7 @@ async fn execute_single_ping(
     }
 }
 
-/// 执行TCP Ping循环并收集统计数据
+/// 执行TCP Ping循环并收集统计数据 - 优化控制流
 async fn ping_host(
     ip: std::net::IpAddr,
     args: &Args,
@@ -70,30 +83,24 @@ async fn ping_host(
 ) -> PingStats {
     let mut stats = PingStats::new();
     let target = SocketAddr::new(ip, args.port);
-    let hostname = args.host.clone();
+    let hostname = &args.host;
 
     println!("正在对 {} ({} - {}) 端口 {} 执行 TCP Ping", 
-        args.host, if ip.is_ipv4() { "IPv4" } else { "IPv6" }, ip, args.port);
+        hostname, if ip.is_ipv4() { "IPv4" } else { "IPv6" }, ip, args.port);
 
     if args.verbose {
         println!("测试参数: 超时={} ms, 间隔={} ms, 测试次数={}", 
-            args.timeout, args.interval, if args.count == 0 { "无限".to_string() } else { args.count.to_string() });
+            args.timeout, args.interval, 
+            if args.count == 0 { "无限".to_string() } else { args.count.to_string() });
     }
 
     let mut seq = 0;
+    let interval_duration = Duration::from_millis(args.interval);
 
-    while running.load(Ordering::SeqCst) {
-        if args.count > 0 && seq >= args.count {
-            break;
-        }
-
-        if !running.load(Ordering::SeqCst) {
-            break;
-        }
-
+    while running.load(Ordering::Relaxed) && (args.count == 0 || seq < args.count) {
         let (success, duration) = execute_single_ping(
             &target, 
-            &hostname, 
+            hostname, 
             args.port, 
             args.timeout, 
             seq, 
@@ -102,16 +109,13 @@ async fn ping_host(
         ).await;
 
         stats.update(success, duration);
-        
         seq += 1;
 
-        if !running.load(Ordering::SeqCst) {
+        if !running.load(Ordering::Relaxed) || (args.count > 0 && seq >= args.count) {
             break;
         }
 
-        if seq < args.count || args.count == 0 {
-            tokio::time::sleep(Duration::from_millis(args.interval)).await;
-        }
+        tokio::time::sleep(interval_duration).await;
     }
 
     stats
