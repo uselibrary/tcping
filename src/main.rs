@@ -14,31 +14,66 @@ use stats::PingStats;
 use network::{tcp_connect, resolve_host};
 use utils::{format_host_port, print_error, setup_signal_handler};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
+/// 执行单次TCP Ping并返回结果
+async fn execute_single_ping(
+    target: &SocketAddr, 
+    hostname: &str,
+    port: u16,
+    timeout: u64,
+    seq_num: u32,
+    verbose: bool,
+    color: bool,
+) -> (bool, Option<Duration>) {
+    let start = Instant::now();
+    
+    let result = tcp_connect(target, timeout).await;
+    let elapsed = start.elapsed();
+    
+    match result {
+        Ok(local_addr) => {
+            let success_msg = format!("从 {} 收到响应: seq={} time={:.2}ms",
+                format_host_port(hostname, port), seq_num, elapsed.as_secs_f64() * 1000.0);
+            println!("{}", if color { success_msg.green().to_string() } else { success_msg });
 
-    // 使用新的主机解析函数
-    let filtered_ips = match resolve_host(&args.host, args.ipv4, args.ipv6, args.verbose) {
-        Ok(ips) => ips,
-        Err(e) => {
-            print_error(&e, args.color);
-            return Ok(());
+            if verbose {
+                if let Some(addr) = local_addr {
+                    println!("  -> 本地连接详情: {} -> {}", addr, target);
+                } else {
+                    println!("  -> 无法获取本地连接信息");
+                }
+            }
+
+            (true, Some(elapsed))
+        },
+        Err(err) => {
+            let error_msg = if err.contains("timed out") || err.contains("超时") {
+                format!("从 {} 超时: seq={}", format_host_port(hostname, port), seq_num)
+            } else {
+                format!("从 {} 无法连接: seq={}", format_host_port(hostname, port), seq_num)
+            };
+            println!("{}", if color { error_msg.red().to_string() } else { error_msg });
+
+            if verbose {
+                println!("  -> 连接失败详情: {}", err);
+            }
+            
+            (false, None)
         }
-    };
+    }
+}
 
-    let ip = filtered_ips[0]; // 已确保至少有一个IP
-    let port = args.port;
-
-    let hostname = args.host.clone();
-    let running = Arc::new(AtomicBool::new(true));
-    setup_signal_handler(running.clone());
-
+/// 执行TCP Ping循环并收集统计数据
+async fn ping_host(
+    ip: std::net::IpAddr,
+    args: &Args,
+    running: Arc<AtomicBool>
+) -> PingStats {
     let mut stats = PingStats::new();
-    let target = SocketAddr::new(ip, port);
+    let target = SocketAddr::new(ip, args.port);
+    let hostname = args.host.clone();
 
     println!("正在对 {} ({} - {}) 端口 {} 执行 TCP Ping", 
-        args.host, if ip.is_ipv4() { "IPv4" } else { "IPv6" }, ip, port);
+        args.host, if ip.is_ipv4() { "IPv4" } else { "IPv6" }, ip, args.port);
 
     if args.verbose {
         println!("测试参数: 超时={} ms, 间隔={} ms, 测试次数={}", 
@@ -52,63 +87,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
-        let start = Instant::now();
         if !running.load(Ordering::SeqCst) {
             break;
         }
 
-        let connect_task = tokio::spawn(async move {
-            tcp_connect(&target, args.timeout).await
-        });
+        let (success, duration) = execute_single_ping(
+            &target, 
+            &hostname, 
+            args.port, 
+            args.timeout, 
+            seq, 
+            args.verbose, 
+            args.color
+        ).await;
 
-        let result = if running.load(Ordering::SeqCst) {
-            match tokio::time::timeout(Duration::from_millis(args.timeout), connect_task).await {
-                Ok(Ok(res)) => res,
-                Ok(Err(_)) => Err("任务被取消".into()),
-                Err(_) => Err("连接超时".into()),
-            }
-        } else {
-            break;
-        };
-
-        if !running.load(Ordering::SeqCst) {
-            break;
-        }
-
-        let elapsed = start.elapsed();
-        let seq_num = seq;
+        stats.update(success, duration);
+        
         seq += 1;
-
-        match result {
-            Ok(local_addr) => {
-                let success_msg = format!("从 {} 收到响应: seq={} time={:.2}ms",
-                    format_host_port(&hostname, port), seq_num, elapsed.as_secs_f64() * 1000.0);
-                println!("{}", if args.color { success_msg.green().to_string() } else { success_msg });
-
-                if args.verbose {
-                    if let Some(addr) = local_addr {
-                        println!("  -> 本地连接详情: {} -> {}", addr, target);
-                    } else {
-                        println!("  -> 无法获取本地连接信息");
-                    }
-                }
-
-                stats.update(true, Some(elapsed));
-            },
-            Err(err) => {
-                let error_msg = if err.contains("timed out") || err.contains("超时") {
-                    format!("从 {} 超时: seq={}", format_host_port(&hostname, port), seq_num)
-                } else {
-                    format!("从 {} 无法连接: seq={}", format_host_port(&hostname, port), seq_num)
-                };
-                println!("{}", if args.color { error_msg.red().to_string() } else { error_msg });
-
-                if args.verbose {
-                    println!("  -> 连接失败详情: {}", err);
-                }
-                stats.update(false, None);
-            }
-        }
 
         if !running.load(Ordering::SeqCst) {
             break;
@@ -119,8 +114,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    stats
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse();
+
+    // 解析主机名到IP地址
+    let filtered_ips = match resolve_host(&args.host, args.ipv4, args.ipv6, args.verbose) {
+        Ok(ips) => ips,
+        Err(e) => {
+            print_error(&e, args.color);
+            return Ok(());
+        }
+    };
+
+    let ip = filtered_ips[0]; // 已确保至少有一个IP
+    
+    // 设置信号处理
+    let running = Arc::new(AtomicBool::new(true));
+    setup_signal_handler(running.clone());
+
+    // 执行TCP Ping
+    let stats = ping_host(ip, &args, running).await;
+
+    // 打印最终统计信息
     if stats.transmitted > 0 {
-        stats.print_summary(&hostname, args.verbose);
+        stats.print_summary(&args.host, args.verbose);
     }
 
     Ok(())
