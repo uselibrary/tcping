@@ -84,25 +84,46 @@ jobs:
 
   release:
     name: 创建发布版本
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: 检查发布触发条件
+        run: |
+          echo "当前github.ref: ${{ github.ref }}"
+          echo "当前github.event_name: ${{ github.event_name }}"
+          echo "当前触发标签: ${GITHUB_REF#refs/tags/}"
+
       - name: 下载所有构建物
         uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: 显示所有构建物
-        run: ls -R
+        run: ls -R artifacts/
+
+      - name: 准备发布文件
+        run: |
+          mkdir -p release
+          cp artifacts/tcping-linux-amd64/tcping release/tcping-linux-amd64
+          cp artifacts/tcping-linux-arm64/tcping release/tcping-linux-arm64
+          cp artifacts/tcping-macos-amd64/tcping release/tcping-macos-amd64
+          cp artifacts/tcping-macos-arm64/tcping release/tcping-macos-arm64
+          cp artifacts/tcping-windows-amd64/tcping.exe release/tcping-windows-amd64.exe
+          cp artifacts/tcping-windows-arm64/tcping.exe release/tcping-windows-arm64.exe
+          ls -la release/
 
       - name: 创建发布版本
         uses: softprops/action-gh-release@v1
         with:
+          name: "TCPing ${{ github.ref_name }}"
+          body: "TCPing - 测试TCP端口连通性的工具 - 版本 ${{ github.ref_name }}"
           files: |
-            tcping-linux-amd64/tcping
-            tcping-linux-arm64/tcping
-            tcping-macos-amd64/tcping
-            tcping-macos-arm64/tcping
-            tcping-windows-amd64/tcping.exe
-            tcping-windows-arm64/tcping.exe
+            release/tcping-linux-amd64
+            release/tcping-linux-arm64
+            release/tcping-macos-amd64
+            release/tcping-macos-arm64
+            release/tcping-windows-amd64.exe
+            release/tcping-windows-arm64.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
