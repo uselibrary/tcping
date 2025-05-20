@@ -98,6 +98,7 @@ jobs:
           fi
 
       - name: 构建
+        shell: bash
         run: |
           if [[ "${{ matrix.target }}" == *linux* ]]; then
             # 对Linux目标使用静态链接

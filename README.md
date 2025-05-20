@@ -36,8 +36,8 @@ tcping [选项] <主机名/IP地址>
   -n, --count <COUNT>        Ping的次数 (0表示无限次) [默认值: 0]
   -t, --timeout <TIMEOUT>    每次Ping的超时时间(毫秒) [默认值: 1000]
   -i, --interval <INTERVAL>  两次Ping之间的间隔时间(毫秒) [默认值: 1000]
-  -4                         强制使用IPv4
-  -6                         强制使用IPv6
+  -4, --ipv4                 强制使用IPv4
+  -6, --ipv6                 强制使用IPv6
   -v, --verbose              启用详细输出模式
   -c, --color                启用彩色输出模式
   -h, --help                 显示帮助信息
