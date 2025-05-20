@@ -29,8 +29,9 @@ async fn execute_single_ping(
     let result = tcp_connect(target, timeout).await;
     let elapsed = start.elapsed();
 
-    // 修复超时逻辑，确保超过 timeout 的响应被标记为超时
-    if elapsed.as_millis() > timeout as u128 {
+    // 修复超时逻辑，使用浮点数比较来确保精确捕获超时情况
+    let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
+    if elapsed_ms >= timeout as f64 {
         let formatted_host = format_host_port(hostname, port);
         let error_msg = format!("从 {} 超时: seq={}", formatted_host, seq_num);
         
@@ -42,7 +43,7 @@ async fn execute_single_ping(
 
         if verbose {
             println!("  -> 超时详情: 响应时间 {:.2}ms 超过超时阈值 {}ms", 
-                elapsed.as_secs_f64() * 1000.0, timeout);
+                elapsed_ms, timeout);
         }
 
         return (false, None);
