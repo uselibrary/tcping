@@ -1,9 +1,10 @@
 [package]
 name = "tcping"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2024"
 authors = ["PACI <mail@pa.ci>"]
 description = "TCP Ping - 测试TCP端口连通性的工具"
+
 
 [profile.release]
 opt-level = 3       # 最高级别优化
