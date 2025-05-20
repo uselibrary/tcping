@@ -8,6 +8,8 @@ pub struct PingStats {
     pub max_time: Duration,
     // 存储所有RTT值用于计算统计数据
     pub rtt_values: Vec<Duration>,
+    // 新增抖动计算字段
+    pub jitter: Option<Duration>,
 }
 
 impl PingStats {
@@ -19,6 +21,7 @@ impl PingStats {
             min_time: None,
             max_time: Duration::from_secs(0),
             rtt_values: Vec::new(),
+            jitter: None,
         }
     }
 
@@ -30,6 +33,21 @@ impl PingStats {
             
             if let Some(time) = rtt {
                 self.total_time += time;
+                
+                // 计算抖动 (与上一次成功RTT的差值的平滑平均值)
+                if let Some(last_rtt) = self.rtt_values.last() {
+                    let diff = if time > *last_rtt {
+                        time - *last_rtt
+                    } else {
+                        *last_rtt - time
+                    };
+                    
+                    self.jitter = match self.jitter {
+                        Some(j) => Some((j * 15 + diff) / 16), // 使用指数平滑方法
+                        None => Some(diff),
+                    };
+                }
+                
                 self.rtt_values.push(time); // 保存每次RTT值
                 
                 // 更新最小时间，处理 None 情况
@@ -114,6 +132,11 @@ impl PingStats {
                 
                 if let Some(std_dev) = self.std_deviation() {
                     println!("标准差(StdDev) = {:.2}ms", std_dev * 1000.0);
+                }
+                
+                // 显示抖动信息
+                if let Some(jitter) = self.jitter {
+                    println!("抖动(Jitter) = {:.2}ms", jitter.as_secs_f64() * 1000.0);
                 }
             }
         }
