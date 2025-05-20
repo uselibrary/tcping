@@ -120,6 +120,37 @@ tcping -6 www.example.com  # 仅使用 IPv6
 
 使用 `Ctrl+C` 可以随时终止程序，即使它被配置为运行无限次 ping。
 
+## CI
+只有当tag包含`v`时，CI才会运行。例如`v0.1.0`。
+
+在本地确认 Tag 存在
+```bash
+git tag | grep v0.1.6
+```
+
+如果没有输出，说明你本地还没建这个 tag，需要先：
+```bash
+git tag -a v0.1.6 -m "Release v0.1.6"
+```
+
+推送这个 Tag 到远程
+
+```bash
+git push origin v0.1.6
+```
+
+或者一次性推所有本地新 tag：
+```bash
+git push --tags
+```
+
+验证 Tag 已推成功
+```bash
+git ls-remote --tags origin | grep v0.1.6
+```
+
+如果能看到类似 refs/tags/v0.1.6 的一行，就说明已经推上去了。
+
 ## 许可证
 本项目使用GPL-3.0许可证。有关详细信息，请参阅 LICENSE 文件。
-```
+
