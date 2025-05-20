@@ -28,6 +28,25 @@ async fn execute_single_ping(
     
     let result = tcp_connect(target, timeout).await;
     let elapsed = start.elapsed();
+
+    // 修复超时逻辑，确保超过 timeout 的响应被标记为超时
+    if elapsed.as_millis() > timeout as u128 {
+        let formatted_host = format_host_port(hostname, port);
+        let error_msg = format!("从 {} 超时: seq={}", formatted_host, seq_num);
+        
+        if color {
+            println!("{}", error_msg.red());
+        } else {
+            println!("{}", error_msg);
+        }
+
+        if verbose {
+            println!("  -> 超时详情: 响应时间 {:.2}ms 超过超时阈值 {}ms", 
+                elapsed.as_secs_f64() * 1000.0, timeout);
+        }
+
+        return (false, None);
+    }
     
     match result {
         Ok(local_addr) => {
