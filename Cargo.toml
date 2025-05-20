@@ -1,6 +1,6 @@
 [package]
 name = "tcping"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 authors = ["PACI <mail@pa.ci>"]
 description = "TCP Ping - 测试TCP端口连通性的工具"
