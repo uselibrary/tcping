@@ -1,5 +1,9 @@
 name: Rust Build
 
+permissions:
+  contents: write
+  packages: write
+
 on:
   push:
     branches: [ "master" ]
