@@ -2,7 +2,11 @@ use clap::Parser;
 
 /// TCP Ping - 测试TCP端口连通性的工具
 #[derive(Parser, Debug)]
-#[clap(author, version, about, after_help = "\
+#[clap(
+    author,
+    version,
+    about,
+    after_help = "\
 使用示例:
   tcping www.example.com                   测试网站的HTTP端口(默认80)
   tcping www.example.com -p 443            测试指定端口(HTTPS)
@@ -11,7 +15,8 @@ use clap::Parser;
   tcping -4 www.example.com                强制使用IPv4
   tcping -6 www.example.com                强制使用IPv6
   tcping -v www.example.com                启用详细输出模式
-  tcping -c www.example.com                启用彩色输出模式")]
+  tcping -c www.example.com                启用彩色输出模式"
+)]
 pub struct Args {
     /// 目标主机名或IP地址
     #[clap(required = true)]
@@ -40,11 +45,11 @@ pub struct Args {
     /// 强制使用IPv6
     #[clap(short = '6', long, conflicts_with = "ipv4")]
     pub ipv6: bool,
-    
+
     /// 启用详细输出模式
     #[clap(short, long)]
     pub verbose: bool,
-    
+
     /// 启用彩色输出模式
     #[clap(short = 'c', long = "color")]
     pub color: bool,

@@ -4,19 +4,11 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 
 /// 创建TCP连接并返回连接结果和本地地址信息
-pub async fn tcp_connect(
-    addr: &SocketAddr,
-    timeout_ms: u64
-) -> Result<Option<SocketAddr>, String> {
-    match tokio::time::timeout(
-        Duration::from_millis(timeout_ms), 
-        TcpStream::connect(*addr)
-    ).await {
-        Ok(Ok(stream)) => {
-            match stream.local_addr() {
-                Ok(local_addr) => Ok(Some(local_addr)),
-                Err(_) => Ok(None),
-            }
+pub async fn tcp_connect(addr: &SocketAddr, timeout_ms: u64) -> Result<Option<SocketAddr>, String> {
+    match tokio::time::timeout(Duration::from_millis(timeout_ms), TcpStream::connect(*addr)).await {
+        Ok(Ok(stream)) => match stream.local_addr() {
+            Ok(local_addr) => Ok(Some(local_addr)),
+            Err(_) => Ok(None),
         },
         Ok(Err(e)) => Err(e.to_string()),
         Err(_) => Err("连接超时".into()),
@@ -24,10 +16,23 @@ pub async fn tcp_connect(
 }
 
 /// 提取IP地址筛选逻辑为单独函数 - 优化内存使用
-pub fn filter_ip_addresses(ip_addrs: Vec<IpAddr>, ipv4: bool, ipv6: bool, verbose: bool) -> Vec<IpAddr> {
+pub fn filter_ip_addresses(
+    ip_addrs: Vec<IpAddr>,
+    ipv4: bool,
+    ipv6: bool,
+    verbose: bool,
+) -> Vec<IpAddr> {
     if verbose {
-        println!("应用IP版本过滤: {}", 
-            if ipv4 { "仅IPv4" } else if ipv6 { "仅IPv6" } else { "自动选择" });
+        println!(
+            "应用IP版本过滤: {}",
+            if ipv4 {
+                "仅IPv4"
+            } else if ipv6 {
+                "仅IPv6"
+            } else {
+                "自动选择"
+            }
+        );
     }
 
     if ip_addrs.is_empty() {
@@ -43,7 +48,7 @@ pub fn filter_ip_addresses(ip_addrs: Vec<IpAddr>, ipv4: bool, ipv6: bool, verbos
         // 优先返回IPv4地址，若无IPv4则返回IPv6
         let has_v4 = ip_addrs.iter().any(IpAddr::is_ipv4);
         let has_v6 = verbose && ip_addrs.iter().any(IpAddr::is_ipv6);
-        
+
         if has_v4 {
             if has_v6 {
                 println!("找到IPv4和IPv6地址, 优先使用IPv4");
@@ -56,7 +61,12 @@ pub fn filter_ip_addresses(ip_addrs: Vec<IpAddr>, ipv4: bool, ipv6: bool, verbos
 }
 
 /// 解析主机名并返回IP地址列表 - 优化错误处理
-pub fn resolve_host(host: &str, ipv4: bool, ipv6: bool, verbose: bool) -> Result<Vec<IpAddr>, String> {
+pub fn resolve_host(
+    host: &str,
+    ipv4: bool,
+    ipv6: bool,
+    verbose: bool,
+) -> Result<Vec<IpAddr>, String> {
     if verbose {
         println!("开始解析主机: {}", host);
     }

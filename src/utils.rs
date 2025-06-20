@@ -1,6 +1,9 @@
 use colored::Colorize;
 use std::net::IpAddr;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 /// 添加一个辅助函数来格式化主机地址和端口
 pub fn format_host_port(host: &str, port: u16) -> String {

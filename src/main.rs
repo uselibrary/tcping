@@ -1,7 +1,10 @@
 use clap::Parser;
 use colored::Colorize;
-use std::net::{SocketAddr};
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::net::SocketAddr;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::{Duration, Instant};
 
 mod cli;
@@ -10,13 +13,13 @@ mod stats;
 mod utils;
 
 use cli::Args;
+use network::{resolve_host, tcp_connect};
 use stats::PingStats;
-use network::{tcp_connect, resolve_host};
 use utils::{format_host_port, print_error, setup_signal_handler};
 
 /// 执行单次TCP Ping并返回结果 - 优化字符串处理
 async fn execute_single_ping(
-    target: &SocketAddr, 
+    target: &SocketAddr,
     hostname: &str,
     port: u16,
     timeout: u64,
@@ -25,7 +28,7 @@ async fn execute_single_ping(
     color: bool,
 ) -> (bool, Option<Duration>) {
     let start = Instant::now();
-    
+
     let result = tcp_connect(target, timeout).await;
     let elapsed = start.elapsed();
 
@@ -34,7 +37,7 @@ async fn execute_single_ping(
     if elapsed_ms >= timeout as f64 {
         let formatted_host = format_host_port(hostname, port);
         let error_msg = format!("从 {} 超时: seq={}", formatted_host, seq_num);
-        
+
         if color {
             println!("{}", error_msg.red());
         } else {
@@ -42,20 +45,24 @@ async fn execute_single_ping(
         }
 
         if verbose {
-            println!("  -> 超时详情: 响应时间 {:.2}ms 超过超时阈值 {}ms", 
-                elapsed_ms, timeout);
+            println!(
+                "  -> 超时详情: 响应时间 {:.2}ms 超过超时阈值 {}ms",
+                elapsed_ms, timeout
+            );
         }
 
         return (false, None);
     }
-    
+
     match result {
         Ok(local_addr) => {
             let formatted_host = format_host_port(hostname, port);
             let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
-            let success_msg = format!("从 {} 收到响应: seq={} time={:.2}ms",
-                formatted_host, seq_num, elapsed_ms);
-                
+            let success_msg = format!(
+                "从 {} 收到响应: seq={} time={:.2}ms",
+                formatted_host, seq_num, elapsed_ms
+            );
+
             if color {
                 println!("{}", success_msg.green());
             } else {
@@ -71,7 +78,7 @@ async fn execute_single_ping(
             }
 
             (true, Some(elapsed))
-        },
+        }
         Err(err) => {
             let formatted_host = format_host_port(hostname, port);
             let error_msg = if err.contains("timed out") || err.contains("超时") {
@@ -79,7 +86,7 @@ async fn execute_single_ping(
             } else {
                 format!("从 {} 无法连接: seq={}", formatted_host, seq_num)
             };
-            
+
             if color {
                 println!("{}", error_msg.red());
             } else {
@@ -89,29 +96,37 @@ async fn execute_single_ping(
             if verbose {
                 println!("  -> 连接失败详情: {}", err);
             }
-            
+
             (false, None)
         }
     }
 }
 
 /// 执行TCP Ping循环并收集统计数据 - 优化控制流
-async fn ping_host(
-    ip: std::net::IpAddr,
-    args: &Args,
-    running: Arc<AtomicBool>
-) -> PingStats {
+async fn ping_host(ip: std::net::IpAddr, args: &Args, running: Arc<AtomicBool>) -> PingStats {
     let mut stats = PingStats::new();
     let target = SocketAddr::new(ip, args.port);
     let hostname = &args.host;
 
-    println!("正在对 {} ({} - {}) 端口 {} 执行 TCP Ping", 
-        hostname, if ip.is_ipv4() { "IPv4" } else { "IPv6" }, ip, args.port);
+    println!(
+        "正在对 {} ({} - {}) 端口 {} 执行 TCP Ping",
+        hostname,
+        if ip.is_ipv4() { "IPv4" } else { "IPv6" },
+        ip,
+        args.port
+    );
 
     if args.verbose {
-        println!("测试参数: 超时={} ms, 间隔={} ms, 测试次数={}", 
-            args.timeout, args.interval, 
-            if args.count == 0 { "无限".to_string() } else { args.count.to_string() });
+        println!(
+            "测试参数: 超时={} ms, 间隔={} ms, 测试次数={}",
+            args.timeout,
+            args.interval,
+            if args.count == 0 {
+                "无限".to_string()
+            } else {
+                args.count.to_string()
+            }
+        );
     }
 
     let mut seq = 0;
@@ -119,14 +134,15 @@ async fn ping_host(
 
     while running.load(Ordering::Relaxed) && (args.count == 0 || seq < args.count) {
         let (success, duration) = execute_single_ping(
-            &target, 
-            hostname, 
-            args.port, 
-            args.timeout, 
-            seq, 
-            args.verbose, 
-            args.color
-        ).await;
+            &target,
+            hostname,
+            args.port,
+            args.timeout,
+            seq,
+            args.verbose,
+            args.color,
+        )
+        .await;
 
         stats.update(success, duration);
         seq += 1;
@@ -155,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let ip = filtered_ips[0]; // 已确保至少有一个IP
-    
+
     // 设置信号处理
     let running = Arc::new(AtomicBool::new(true));
     setup_signal_handler(running.clone());
