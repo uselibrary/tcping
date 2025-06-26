@@ -77,7 +77,7 @@ impl PingStats {
 
         let len = sorted_values.len();
         let mid = len / 2;
-        
+
         if len % 2 == 0 && len >= 2 {
             // 偶数个元素，取中间两个的平均值
             Some((sorted_values[mid - 1] + sorted_values[mid]) / 2)

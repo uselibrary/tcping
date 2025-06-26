@@ -20,7 +20,7 @@ use utils::{print_error, setup_signal_handler};
 /// 执行单次TCP Ping并返回结果 - 简化超时逻辑
 async fn execute_single_ping(
     target: &SocketAddr,
-    formatted_host: &str,  // 预先格式化，避免重复计算
+    formatted_host: &str, // 预先格式化，避免重复计算
     timeout: u64,
     seq_num: u32,
     verbose: bool,
@@ -45,7 +45,8 @@ async fn execute_single_ping(
         if verbose {
             println!(
                 "  -> 超时详情: 响应时间 {:.2}ms 超过超时阈值 {}ms",
-                elapsed.as_secs_f64() * 1000.0, timeout
+                elapsed.as_secs_f64() * 1000.0,
+                timeout
             );
         }
 
@@ -103,7 +104,7 @@ async fn execute_single_ping(
 async fn ping_host(ip: std::net::IpAddr, args: &Args, running: Arc<AtomicBool>) -> PingStats {
     let mut stats = PingStats::new();
     let target = SocketAddr::new(ip, args.port);
-    
+
     // 预先格式化主机端口字符串，避免在循环中重复计算
     let formatted_host = if ip.is_ipv6() {
         format!("[{}]:{}", ip, args.port)
@@ -138,7 +139,7 @@ async fn ping_host(ip: std::net::IpAddr, args: &Args, running: Arc<AtomicBool>) 
     while running.load(Ordering::Relaxed) && (args.count == 0 || seq < args.count) {
         let (success, duration) = execute_single_ping(
             &target,
-            &formatted_host,  // 传递预先格式化的字符串
+            &formatted_host, // 传递预先格式化的字符串
             args.timeout,
             seq,
             args.verbose,

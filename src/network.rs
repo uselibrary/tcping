@@ -46,7 +46,7 @@ pub fn filter_ip_addresses(
         _ => {
             // 优先返回IPv4地址，若无IPv4则返回IPv6
             let has_v4 = ip_addrs.iter().any(IpAddr::is_ipv4);
-            
+
             if has_v4 {
                 if verbose && ip_addrs.iter().any(IpAddr::is_ipv6) {
                     println!("找到IPv4和IPv6地址, 优先使用IPv4");
