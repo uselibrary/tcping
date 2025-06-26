@@ -15,7 +15,7 @@ pub async fn tcp_connect(addr: &SocketAddr, timeout_ms: u64) -> Result<Option<So
     }
 }
 
-/// 提取IP地址筛选逻辑为单独函数 - 优化内存使用
+/// 简化IP地址筛选逻辑
 pub fn filter_ip_addresses(
     ip_addrs: Vec<IpAddr>,
     ipv4: bool,
@@ -39,23 +39,22 @@ pub fn filter_ip_addresses(
         return vec![];
     }
 
-    // 优化：直接使用迭代器筛选，避免创建不必要的集合
-    if ipv4 {
-        ip_addrs.into_iter().filter(IpAddr::is_ipv4).collect()
-    } else if ipv6 {
-        ip_addrs.into_iter().filter(IpAddr::is_ipv6).collect()
-    } else {
-        // 优先返回IPv4地址，若无IPv4则返回IPv6
-        let has_v4 = ip_addrs.iter().any(IpAddr::is_ipv4);
-        let has_v6 = verbose && ip_addrs.iter().any(IpAddr::is_ipv6);
-
-        if has_v4 {
-            if has_v6 {
-                println!("找到IPv4和IPv6地址, 优先使用IPv4");
+    // 直接使用迭代器筛选，避免创建不必要的集合
+    match (ipv4, ipv6) {
+        (true, false) => ip_addrs.into_iter().filter(IpAddr::is_ipv4).collect(),
+        (false, true) => ip_addrs.into_iter().filter(IpAddr::is_ipv6).collect(),
+        _ => {
+            // 优先返回IPv4地址，若无IPv4则返回IPv6
+            let has_v4 = ip_addrs.iter().any(IpAddr::is_ipv4);
+            
+            if has_v4 {
+                if verbose && ip_addrs.iter().any(IpAddr::is_ipv6) {
+                    println!("找到IPv4和IPv6地址, 优先使用IPv4");
+                }
+                ip_addrs.into_iter().filter(IpAddr::is_ipv4).collect()
+            } else {
+                ip_addrs.into_iter().filter(IpAddr::is_ipv6).collect()
             }
-            ip_addrs.into_iter().filter(IpAddr::is_ipv4).collect()
-        } else {
-            ip_addrs.into_iter().filter(IpAddr::is_ipv6).collect()
         }
     }
 }

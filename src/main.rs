@@ -15,27 +15,25 @@ mod utils;
 use cli::Args;
 use network::{resolve_host, tcp_connect};
 use stats::PingStats;
-use utils::{format_host_port, print_error, setup_signal_handler};
+use utils::{print_error, setup_signal_handler};
 
-/// 执行单次TCP Ping并返回结果 - 优化字符串处理
+/// 执行单次TCP Ping并返回结果 - 简化超时逻辑
 async fn execute_single_ping(
     target: &SocketAddr,
-    hostname: &str,
-    port: u16,
+    formatted_host: &str,  // 预先格式化，避免重复计算
     timeout: u64,
     seq_num: u32,
     verbose: bool,
     color: bool,
 ) -> (bool, Option<Duration>) {
     let start = Instant::now();
+    let timeout_duration = Duration::from_millis(timeout);
 
     let result = tcp_connect(target, timeout).await;
     let elapsed = start.elapsed();
 
-    // 修复超时逻辑，使用浮点数比较来确保精确捕获超时情况
-    let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
-    if elapsed_ms >= timeout as f64 {
-        let formatted_host = format_host_port(hostname, port);
+    // 简化超时检查 - 直接使用Duration比较，更高效
+    if elapsed >= timeout_duration {
         let error_msg = format!("从 {} 超时: seq={}", formatted_host, seq_num);
 
         if color {
@@ -47,7 +45,7 @@ async fn execute_single_ping(
         if verbose {
             println!(
                 "  -> 超时详情: 响应时间 {:.2}ms 超过超时阈值 {}ms",
-                elapsed_ms, timeout
+                elapsed.as_secs_f64() * 1000.0, timeout
             );
         }
 
@@ -56,7 +54,6 @@ async fn execute_single_ping(
 
     match result {
         Ok(local_addr) => {
-            let formatted_host = format_host_port(hostname, port);
             let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
             let success_msg = format!(
                 "从 {} 收到响应: seq={} time={:.2}ms",
@@ -80,7 +77,7 @@ async fn execute_single_ping(
             (true, Some(elapsed))
         }
         Err(err) => {
-            let formatted_host = format_host_port(hostname, port);
+            // 简化错误处理 - 移除重复的超时检查
             let error_msg = if err.contains("timed out") || err.contains("超时") {
                 format!("从 {} 超时: seq={}", formatted_host, seq_num)
             } else {
@@ -102,15 +99,21 @@ async fn execute_single_ping(
     }
 }
 
-/// 执行TCP Ping循环并收集统计数据 - 优化控制流
+/// 执行TCP Ping循环并收集统计数据 - 优化控制流和字符串处理
 async fn ping_host(ip: std::net::IpAddr, args: &Args, running: Arc<AtomicBool>) -> PingStats {
     let mut stats = PingStats::new();
     let target = SocketAddr::new(ip, args.port);
-    let hostname = &args.host;
+    
+    // 预先格式化主机端口字符串，避免在循环中重复计算
+    let formatted_host = if ip.is_ipv6() {
+        format!("[{}]:{}", ip, args.port)
+    } else {
+        format!("{}:{}", args.host, args.port)
+    };
 
     println!(
         "正在对 {} ({} - {}) 端口 {} 执行 TCP Ping",
-        hostname,
+        args.host,
         if ip.is_ipv4() { "IPv4" } else { "IPv6" },
         ip,
         args.port
@@ -135,8 +138,7 @@ async fn ping_host(ip: std::net::IpAddr, args: &Args, running: Arc<AtomicBool>) 
     while running.load(Ordering::Relaxed) && (args.count == 0 || seq < args.count) {
         let (success, duration) = execute_single_ping(
             &target,
-            hostname,
-            args.port,
+            &formatted_host,  // 传递预先格式化的字符串
             args.timeout,
             seq,
             args.verbose,
