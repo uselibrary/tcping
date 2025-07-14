@@ -25,38 +25,22 @@ pub fn filter_ip_addresses(
     if verbose {
         println!(
             "应用IP版本过滤: {}",
-            if ipv4 {
-                "仅IPv4"
-            } else if ipv6 {
-                "仅IPv6"
-            } else {
-                "自动选择"
+            match (ipv4, ipv6) {
+                (true, false) => "仅IPv4",
+                (false, true) => "仅IPv6",
+                _ => "自动选择",
             }
         );
     }
 
-    if ip_addrs.is_empty() {
-        return vec![];
-    }
-
-    // 直接使用迭代器筛选，避免创建不必要的集合
-    match (ipv4, ipv6) {
-        (true, false) => ip_addrs.into_iter().filter(IpAddr::is_ipv4).collect(),
-        (false, true) => ip_addrs.into_iter().filter(IpAddr::is_ipv6).collect(),
-        _ => {
-            // 优先返回IPv4地址，若无IPv4则返回IPv6
-            let has_v4 = ip_addrs.iter().any(IpAddr::is_ipv4);
-
-            if has_v4 {
-                if verbose && ip_addrs.iter().any(IpAddr::is_ipv6) {
-                    println!("找到IPv4和IPv6地址, 优先使用IPv4");
-                }
-                ip_addrs.into_iter().filter(IpAddr::is_ipv4).collect()
-            } else {
-                ip_addrs.into_iter().filter(IpAddr::is_ipv6).collect()
-            }
-        }
-    }
+    ip_addrs
+        .into_iter()
+        .filter(|ip| match (ipv4, ipv6) {
+            (true, false) => ip.is_ipv4(),
+            (false, true) => ip.is_ipv6(),
+            _ => true,
+        })
+        .collect()
 }
 
 /// 解析主机名并返回IP地址列表 - 优化错误处理
@@ -67,7 +51,7 @@ pub fn resolve_host(
     verbose: bool,
 ) -> Result<Vec<IpAddr>, String> {
     if verbose {
-        println!("开始解析主机: {}", host);
+        println!("开始解析主机: {host}");
     }
 
     let ip_addrs = if let Ok(ips) = lookup_host(host) {
@@ -81,14 +65,14 @@ pub fn resolve_host(
         }
         vec![ip]
     } else {
-        return Err(format!("无法解析主机名: {}", host));
+        return Err(format!("无法解析主机名: {host}"));
     };
 
     let filtered_ips = filter_ip_addresses(ip_addrs, ipv4, ipv6, verbose);
 
     if filtered_ips.is_empty() {
         let version = if ipv6 { "IPv6" } else { "IPv4" };
-        return Err(format!("未找到主机 {} 的{}地址", host, version));
+        return Err(format!("未找到主机 {host} 的{version}地址"));
     }
 
     if verbose && filtered_ips.len() > 1 {

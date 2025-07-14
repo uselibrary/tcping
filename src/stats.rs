@@ -31,32 +31,17 @@ impl PingStats {
             self.received += 1;
 
             if let Some(time) = rtt {
-                // 计算抖动 (与上一次成功RTT的差值的平滑平均值)
+                // 优化抖动计算逻辑，避免重复计算
                 if let Some(last_rtt) = self.rtt_values.last() {
-                    let diff = if time > *last_rtt {
-                        time - *last_rtt
-                    } else {
-                        *last_rtt - time
-                    };
-
-                    self.jitter = match self.jitter {
-                        Some(j) => Some((j * 15 + diff) / 16), // 使用指数平滑方法
-                        None => Some(diff),
-                    };
+                    let diff = time.abs_diff(*last_rtt);
+                    self.jitter = Some(self.jitter.unwrap_or(diff).saturating_add(diff) / 2);
                 }
 
-                self.rtt_values.push(time); // 保存每次RTT值
+                self.rtt_values.push(time);
 
-                // 更新最小时间，处理 None 情况
-                self.min_time = match self.min_time {
-                    None => Some(time),
-                    Some(current_min) if time < current_min => Some(time),
-                    other => other,
-                };
-
-                if time > self.max_time {
-                    self.max_time = time;
-                }
+                // 更新最小时间和最大时间
+                self.min_time = Some(self.min_time.unwrap_or(time).min(time));
+                self.max_time = self.max_time.max(time);
             }
         }
     }
@@ -109,7 +94,7 @@ impl PingStats {
     }
 
     pub fn print_summary(&self, hostname: &str, verbose: bool) {
-        println!("\n--- {} TCP ping 统计 ---", hostname);
+        println!("\n--- {hostname} TCP ping 统计 ---");
         println!(
             "已发送 = {}, 已接收 = {}, 丢失 = {} ({:.1}% 丢失)",
             self.transmitted,
@@ -124,7 +109,6 @@ impl PingStats {
 
         if self.received > 0 {
             let avg_time = self.total_time() / self.received;
-            // 处理 min_time 为 None 的情况
             let min_time = self.min_time.unwrap_or(Duration::from_secs(0));
 
             println!(
@@ -134,7 +118,6 @@ impl PingStats {
                 avg_time.as_secs_f64() * 1000.0
             );
 
-            // 在详细模式下显示额外统计信息
             if verbose && self.received >= 2 {
                 if let Some(median) = self.median_time() {
                     println!("中位数(Median) = {:.2}ms", median.as_secs_f64() * 1000.0);
@@ -144,7 +127,6 @@ impl PingStats {
                     println!("标准差(StdDev) = {:.2}ms", std_dev * 1000.0);
                 }
 
-                // 显示抖动信息
                 if let Some(jitter) = self.jitter {
                     println!("抖动(Jitter) = {:.2}ms", jitter.as_secs_f64() * 1000.0);
                 }
