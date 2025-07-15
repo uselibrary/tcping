@@ -1,4 +1,5 @@
 use clap::Parser;
+use colored::*;
 use std::net::SocketAddr;
 use std::sync::{
     Arc,
@@ -42,6 +43,15 @@ fn check_timeout(
     false
 }
 
+/// 打印彩色信息
+fn print_colored_message(message: &str, color_enabled: bool) {
+    if color_enabled {
+        println!("{message}", message = message.green());
+    } else {
+        println!("{message}");
+    }
+}
+
 /// 执行单次TCP Ping并返回结果 - 简化超时逻辑
 async fn execute_single_ping(
     target: &SocketAddr,
@@ -49,6 +59,7 @@ async fn execute_single_ping(
     timeout: u64,
     seq_num: u32,
     verbose: bool,
+    color_enabled: bool,
 ) -> (bool, Option<Duration>) {
     let start = Instant::now();
     let result = tcp_connect(target, timeout).await;
@@ -63,7 +74,7 @@ async fn execute_single_ping(
             let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
             let success_msg =
                 format!("从 {formatted_host} 收到响应: seq={seq_num} time={elapsed_ms:.2}ms");
-            println!("{success_msg}");
+            print_colored_message(&success_msg, color_enabled);
 
             if verbose {
                 if let Some(addr) = local_addr {
@@ -77,7 +88,7 @@ async fn execute_single_ping(
         }
         Err(err) => {
             let error_msg = format!("从 {formatted_host} 无法连接: seq={seq_num}");
-            println!("{error_msg}");
+            print_colored_message(&error_msg, color_enabled);
 
             if verbose {
                 println!("  -> 连接失败详情: {err}");
@@ -130,6 +141,7 @@ async fn ping_host(ip: std::net::IpAddr, args: &Args, running: Arc<AtomicBool>) 
             args.timeout,
             seq,
             args.verbose,
+            args.color,
         )
         .await;
 
